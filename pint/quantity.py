@@ -57,7 +57,7 @@ class _Quantity(SharedRegistryObject):
 
     def __reduce__(self):
         from . import _build_quantity
-        return _build_quantity, (self.magnitude, self._units)
+        return _build_quantity, (self.magnitude, str(self._units))
 
     def __new__(cls, value, units=None):
         if units is None:
