@@ -339,6 +339,7 @@ class _Quantity(SharedRegistryObject):
         <Quantity(10.0, 'millinewton')>
         """
         if self.unitless or self.magnitude==0:
+            self.ito_base_units()  # this will eliminate units such as 1 hr / minute
             return self
 
         SI_prefixes = {}
