@@ -1,7 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+import os
 import sys
+
+try:
+    from subprocess import check_output, check_call
+except ImportError:
+    import subprocess as sp
+    def check_output(*args, **kwds):
+        kwds['stdout'] = sp.PIPE
+        proc = sp.Popen(*args, **kwds)
+        output = proc.stdout.read()
+        proc.wait()
+        if proc.returncode != 0:
+            ex = Exception("Process had nonzero return value %d" % proc.returncode)
+            ex.returncode = proc.returncode
+            ex.output = output
+            raise ex
+        return output
 
 try:
     reload(sys).setdefaultencoding("UTF-8")
@@ -27,9 +43,36 @@ long_description = '\n\n'.join([read('README'),
 
 __doc__ = long_description
 
+
+def getGitVersion(tagPrefix=None):
+    """Return a version string with information about this git checkout.
+    If the checkout is an unmodified, tagged commit, then return the tag version.
+    If this is not a tagged commit, return the output of ``git describe --tags``.
+    If this checkout has been modified, append "+" to the version.
+    """
+    path = os.getcwd()
+    if not os.path.isdir(os.path.join(path, '.git')):
+        return None
+
+    gitVersion = check_output(['git', 'describe', '--tags']).strip().decode('utf-8')
+
+    # any uncommitted modifications?
+    modified = False
+    status = check_output(['git', 'status', '--porcelain'], universal_newlines=True).strip().split('\n')
+    for line in status:
+        if line != '' and line[:2] != '??':
+            modified = True
+            break
+
+    if modified:
+        gitVersion = gitVersion + '+'
+
+    return gitVersion
+
+
 setup(
     name='Pint',
-    version='0.8.dev0',
+    version=getGitVersion(),
     description='Physical quantities module',
     long_description=long_description,
     keywords='physical quantities unit conversion science',
