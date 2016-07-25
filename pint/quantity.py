@@ -338,8 +338,10 @@ class _Quantity(SharedRegistryObject):
         >>> (1e-2*ureg('kg m/s^2')).to_compact('N')
         <Quantity(10.0, 'millinewton')>
         """
-        if self.unitless or self.magnitude==0:
+        if self.unitless:
             self.ito_base_units()  # this will eliminate units such as 1 hr / minute
+            return self
+        if self.magnitude == 0:
             return self
 
         SI_prefixes = {}
