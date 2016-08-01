@@ -6,6 +6,7 @@ ureg = UnitRegistry()
 set_application_registry(ureg)
 Q = ureg.Quantity
 
+
 class TestInferBaseUnit(QuantityTestCase):
     def test_infer_base_unit(self):
         from pint.util import infer_base_unit
@@ -22,3 +23,10 @@ class TestInferBaseUnit(QuantityTestCase):
 
         r = (Q(1, 'm') * Q(1, 'mm') / Q(1, 'm') / Q(2, 'um') * Q(2, 's')).to_compact()
         self.assertQuantityAlmostEqual(r, Q(1000, 's'))
+
+    def test_volts(self):
+        from pint.util import infer_base_unit
+        r = Q(1, 'V') * Q(1, 'mV') / Q(1, 'kV')
+        b = infer_base_unit(r)
+        self.assertEqual(b, Q(1, 'V').units)
+        self.assertQuantityAlmostEqual(r, Q(1, 'uV'))

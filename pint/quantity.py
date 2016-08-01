@@ -1389,3 +1389,14 @@ class _Quantity(SharedRegistryObject):
             if next(iter(self._units.values())) != 1:
                 is_ok = False
         return is_ok
+
+
+def build_quantity_class(registry, force_ndarray=False):
+
+    class Quantity(_Quantity):
+        pass
+
+    Quantity._REGISTRY = registry
+    Quantity.force_ndarray = force_ndarray
+
+    return Quantity
