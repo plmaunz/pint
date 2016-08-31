@@ -14,6 +14,8 @@ import math
 import operator
 import functools
 import bisect
+import warnings
+import numbers
 
 from .formatting import (remove_custom_flags, siunitx_format_unit, ndarray_to_latex,
                          ndarray_to_latex_parts)
@@ -122,7 +124,11 @@ class _Quantity(SharedRegistryObject):
     def __format__(self, spec):
         spec = spec or self.default_format
 
-        allf = '{0} {1}'
+        if 'L' in spec:
+            allf = plain_allf = r'{0}\ {1}'
+        else:
+            allf = plain_allf = '{0} {1}'
+
         mstr, ustr = None, None
 
         # If Compact is selected, do it at the beginning
@@ -160,6 +166,9 @@ class _Quantity(SharedRegistryObject):
         else:
             mstr = format(obj.magnitude, mspec).replace('\n', '')
 
+        if allf == plain_allf and ustr.startswith('1 /'):
+            # Write e.g. "3 / s" instead of "3 1 / s"
+            ustr = ustr[2:]
         return allf.format(mstr, ustr).strip()
 
     # IPython related code
@@ -338,10 +347,18 @@ class _Quantity(SharedRegistryObject):
         >>> (1e-2*ureg('kg m/s^2')).to_compact('N')
         <Quantity(10.0, 'millinewton')>
         """
-        if self.unitless:
-            self.ito_base_units()  # this will eliminate units such as 1 hr / minute
+        if not isinstance(self.magnitude, numbers.Number):
+            msg = ("to_compact applied to non numerical types "
+                    "has an undefined behavior.")
+            w = RuntimeWarning(msg)
+            warnings.warn(w, stacklevel=2)
             return self
-        if self.magnitude == 0:
+
+        if self.unitless:
+            self.ito_base_units()
+            return self
+
+        if self.magnitude==0 or math.isnan(self.magnitude) or math.isinf(self.magnitude):
             return self
 
         SI_prefixes = {}
@@ -987,7 +1004,7 @@ class _Quantity(SharedRegistryObject):
     #: original.
     __copy_units = 'compress conj conjugate copy cumsum diagonal flatten ' \
                    'max mean min ptp ravel repeat reshape round ' \
-                   'squeeze std sum take trace transpose ' \
+                   'squeeze std sum swapaxes take trace transpose ' \
                    'ceil floor hypot rint ' \
                    'add subtract ' \
                    'copysign nextafter trunc ' \

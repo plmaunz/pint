@@ -5,6 +5,7 @@ from __future__ import division, unicode_literals, print_function, absolute_impo
 import copy
 import math
 import operator as op
+import warnings
 
 from pint import DimensionalityError, OffsetUnitCalculusError, UnitRegistry
 from pint.unit import UnitsContainer
@@ -95,18 +96,21 @@ class TestQuantity(QuantityTestCase):
                              ('{0.magnitude!s}',  str(x.magnitude)), ('{0.units!s}',  str(x.units)),
                              ('{0.magnitude!r}',  repr(x.magnitude)), ('{0.units!r}',  repr(x.units)),
                              ('{0:.4f}', '{0:.4f} {1!s}'.format(x.magnitude, x.units)),
-                             ('{0:L}', r'4.12345678 \frac{kilogram \cdot meter^{2}}{second}'),
+                             ('{0:L}', r'4.12345678\ \frac{\mathrm{kilogram} \cdot \mathrm{meter}^{2}}{\mathrm{second}}'),
                              ('{0:P}', '4.12345678 kilogram·meter²/second'),
                              ('{0:H}', '4.12345678 kilogram meter<sup>2</sup>/second'),
                              ('{0:C}', '4.12345678 kilogram*meter**2/second'),
                              ('{0:~}', '4.12345678 kg * m ** 2 / s'),
-                             ('{0:L~}', r'4.12345678 \frac{kg \cdot m^{2}}{s}'),
+                             ('{0:L~}', r'4.12345678\ \frac{\mathrm{kg} \cdot \mathrm{m}^{2}}{\mathrm{s}}'),
                              ('{0:P~}', '4.12345678 kg·m²/s'),
                              ('{0:H~}', '4.12345678 kg m<sup>2</sup>/s'),
                              ('{0:C~}', '4.12345678 kg*m**2/s'),
                              ('{0:Lx}', r'\SI[]{4.12345678}{\kilo\gram\meter\squared\per\second}'),
                              ):
             self.assertEqual(spec.format(x), result)
+        # Check the special case that prevents e.g. '3 1 / second'
+        x = self.Q_(3, UnitsContainer(second=-1))
+        self.assertEqual('{0}'.format(x), '3 / second')
 
     def test_format_compact(self):
         q1 = (200e-9 * self.ureg.s).to_compact()
@@ -126,12 +130,12 @@ class TestQuantity(QuantityTestCase):
     def test_default_formatting(self):
         ureg = UnitRegistry()
         x = ureg.Quantity(4.12345678, UnitsContainer(meter=2, kilogram=1, second=-1))
-        for spec, result in (('L', r'4.12345678 \frac{kilogram \cdot meter^{2}}{second}'),
+        for spec, result in (('L', r'4.12345678\ \frac{\mathrm{kilogram} \cdot \mathrm{meter}^{2}}{\mathrm{second}}'),
                              ('P', '4.12345678 kilogram·meter²/second'),
                              ('H', '4.12345678 kilogram meter<sup>2</sup>/second'),
                              ('C', '4.12345678 kilogram*meter**2/second'),
                              ('~', '4.12345678 kg * m ** 2 / s'),
-                             ('L~', r'4.12345678 \frac{kg \cdot m^{2}}{s}'),
+                             ('L~', r'4.12345678\ \frac{\mathrm{kg} \cdot \mathrm{m}^{2}}{\mathrm{s}}'),
                              ('P~', '4.12345678 kg·m²/s'),
                              ('H~', '4.12345678 kg m<sup>2</sup>/s'),
                              ('C~', '4.12345678 kg*m**2/s'),
@@ -177,6 +181,17 @@ class TestQuantity(QuantityTestCase):
             self.assertQuantityAlmostEqual(qac, r)
             self.assertIsNot(r, q)
             self.assertIsNot(r._magnitude, a)
+
+    @helpers.requires_numpy()
+    def test_retain_unit(self):
+        # Test that methods correctly retain units and do not degrade into
+        # ordinary ndarrays.  List contained in __copy_units.
+        a = np.ones((3, 2))
+        q = self.Q_(a, "km")
+        self.assertEqual(q.u, q.reshape(2, 3).u)
+        self.assertEqual(q.u, q.swapaxes(0, 1).u)
+        self.assertEqual(q.u, q.mean().u)
+        self.assertEqual(q.u, np.compress((q==q[0,0]).any(0), q).u)
 
     def test_context_attr(self):
         self.assertEqual(self.ureg.meter, self.Q_(1, 'meter'))
@@ -297,6 +312,15 @@ class TestQuantityToCompact(QuantityTestCase):
         self.compareQuantity_compact(self.Q_(101.3e3, 'kg/m/s^2'),
             101.3*ureg.kPa, ureg.Pa)
 
+    def test_limits_magnitudes(self):
+        ureg = self.ureg
+        self.compareQuantity_compact(0*ureg.m, 0*ureg.m)
+        self.compareQuantity_compact(float('inf')*ureg.m, float('inf')*ureg.m)
+
+    def test_nonnumeric_magnitudes(self):
+        ureg = self.ureg
+        x = "some string"*ureg.m
+        self.assertRaises(RuntimeError, self.compareQuantity_compact(x,x))
 
 class TestQuantityBasicMath(QuantityTestCase):
 
