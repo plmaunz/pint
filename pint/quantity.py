@@ -838,6 +838,206 @@ class _Quantity(SharedRegistryObject):
     __rdiv__ = __rtruediv__
     __idiv__ = __itruediv__
 
+    def __mod__(self, other):
+        return self._add_sub(other, operator.mod)
+
+    def rmod(self, a, b):
+        return operator.mod(b, a)
+
+    def __rmod__(self, other):
+        return self._add_sub(other, self.rmod)
+
+    def __imod__(self, other):
+        if not isinstance(self._magnitude, ndarray):
+            return self._add_sub(other, operator.mod)
+        else:
+            return self._iadd_sub(other, operator.imod)
+
+    def __sub__(self, other):
+        return self._add_sub(other, operator.sub)
+
+    def __rsub__(self, other):
+        return -self._add_sub(other, operator.sub)
+
+    def _imul_div(self, other, magnitude_op, units_op=None):
+        """Perform multiplication or division operation in-place and return the
+        result.
+
+        :param other: object to be multiplied/divided with self
+        :type other: Quantity or any type accepted by :func:`_to_magnitude`
+        :param magnitude_op: operator function to perform on the magnitudes
+            (e.g. operator.mul)
+        :type magnitude_op: function
+        :param units_op: operator function to perform on the units; if None,
+            *magnitude_op* is used
+        :type units_op: function or None
+        """
+        if units_op is None:
+            units_op = magnitude_op
+
+        offset_units_self = self._get_non_multiplicative_units()
+        no_offset_units_self = len(offset_units_self)
+
+        if not self._check(other):
+
+            if not self._ok_for_muldiv(no_offset_units_self):
+                raise OffsetUnitCalculusError(self._units,
+                                              getattr(other, 'units', ''))
+            if len(offset_units_self) == 1:
+                if (self._units[offset_units_self[0]] != 1
+                    or magnitude_op not in [operator.mul, operator.imul]):
+                    raise OffsetUnitCalculusError(self._units,
+                                                  getattr(other, 'units', ''))
+            try:
+                other_magnitude = _to_magnitude(other, self.force_ndarray)
+            except TypeError:
+                return NotImplemented
+            self._magnitude = magnitude_op(self._magnitude, other_magnitude)
+            self._units = units_op(self._units, UnitsContainer())
+            return self
+
+        if isinstance(other, self._REGISTRY.Unit):
+            other = 1.0 * other
+
+        if not self._ok_for_muldiv(no_offset_units_self):
+            raise OffsetUnitCalculusError(self._units, other._units)
+        elif no_offset_units_self == 1 and len(self._units) == 1:
+            self.ito_root_units()
+
+        no_offset_units_other = len(other._get_non_multiplicative_units())
+
+        if not other._ok_for_muldiv(no_offset_units_other):
+            raise OffsetUnitCalculusError(self._units, other._units)
+        elif no_offset_units_other == 1 and len(other._units) == 1:
+            other.ito_root_units()
+
+        self._magnitude = magnitude_op(self._magnitude, other._magnitude)
+        self._units = units_op(self._units, other._units)
+
+        return self
+
+    def _mul_div(self, other, magnitude_op, units_op=None):
+        """Perform multiplication or division operation and return the result.
+
+        :param other: object to be multiplied/divided with self
+        :type other: Quantity or any type accepted by :func:`_to_magnitude`
+        :param magnitude_op: operator function to perform on the magnitudes
+            (e.g. operator.mul)
+        :type magnitude_op: function
+        :param units_op: operator function to perform on the units; if None,
+            *magnitude_op* is used
+        :type units_op: function or None
+        """
+        if units_op is None:
+            units_op = magnitude_op
+
+        offset_units_self = self._get_non_multiplicative_units()
+        no_offset_units_self = len(offset_units_self)
+
+        if not self._check(other):
+
+            if not self._ok_for_muldiv(no_offset_units_self):
+                raise OffsetUnitCalculusError(self._units,
+                                              getattr(other, 'units', ''))
+            if len(offset_units_self) == 1:
+                if (self._units[offset_units_self[0]] != 1
+                    or magnitude_op not in [operator.mul, operator.imul]):
+                    raise OffsetUnitCalculusError(self._units,
+                                                  getattr(other, 'units', ''))
+            try:
+                other_magnitude = _to_magnitude(other, self.force_ndarray)
+            except TypeError:
+                return NotImplemented
+
+            magnitude = magnitude_op(self._magnitude, other_magnitude)
+            units = units_op(self._units, UnitsContainer())
+
+            return self.__class__(magnitude, units)
+
+        if isinstance(other, self._REGISTRY.Unit):
+            other = 1.0 * other
+
+        new_self = self
+
+        if not self._ok_for_muldiv(no_offset_units_self):
+            raise OffsetUnitCalculusError(self._units, other._units)
+        elif no_offset_units_self == 1 and len(self._units) == 1:
+            new_self = self.to_root_units()
+
+        no_offset_units_other = len(other._get_non_multiplicative_units())
+
+        if not other._ok_for_muldiv(no_offset_units_other):
+            raise OffsetUnitCalculusError(self._units, other._units)
+        elif no_offset_units_other == 1 and len(other._units) == 1:
+            other = other.to_root_units()
+
+        magnitude = magnitude_op(new_self._magnitude, other._magnitude)
+        units = units_op(new_self._units, other._units)
+
+        return self.__class__(magnitude, units)
+
+    def __imul__(self, other):
+        if not isinstance(self._magnitude, ndarray):
+            return self._mul_div(other, operator.mul)
+        else:
+            return self._imul_div(other, operator.imul)
+
+    def __mul__(self, other):
+        return self._mul_div(other, operator.mul)
+
+    __rmul__ = __mul__
+
+    def __itruediv__(self, other):
+        if not isinstance(self._magnitude, ndarray):
+            return self._mul_div(other, operator.truediv)
+        else:
+            return self._imul_div(other, operator.itruediv)
+
+    def __truediv__(self, other):
+        return self._mul_div(other, operator.truediv)
+
+    def __ifloordiv__(self, other):
+        if not isinstance(self._magnitude, ndarray):
+            return self._mul_div(other, operator.floordiv, units_op=operator.itruediv)
+        else:
+            return self._imul_div(other, operator.ifloordiv, units_op=operator.itruediv)
+
+    def __floordiv__(self, other):
+        return self._mul_div(other, operator.floordiv, units_op=operator.truediv)
+
+    def __rtruediv__(self, other):
+        try:
+            other_magnitude = _to_magnitude(other, self.force_ndarray)
+        except TypeError:
+            return NotImplemented
+
+        no_offset_units_self = len(self._get_non_multiplicative_units())
+        if not self._ok_for_muldiv(no_offset_units_self):
+            raise OffsetUnitCalculusError(self._units, '')
+        elif no_offset_units_self == 1 and len(self._units) == 1:
+            self = self.to_root_units()
+
+        return self.__class__(other_magnitude / self._magnitude, 1 / self._units)
+
+    def __rfloordiv__(self, other):
+        try:
+            other_magnitude = _to_magnitude(other, self.force_ndarray)
+        except TypeError:
+            return NotImplemented
+
+        no_offset_units_self = len(self._get_non_multiplicative_units())
+        if not self._ok_for_muldiv(no_offset_units_self):
+            raise OffsetUnitCalculusError(self._units, '')
+        elif no_offset_units_self == 1 and len(self._units) == 1:
+            self = self.to_root_units()
+
+        return self.__class__(other_magnitude // self._magnitude, 1 / self._units)
+
+    __div__ = __truediv__
+    __rdiv__ = __rtruediv__
+    __idiv__ = __itruediv__
+
+
     def __ipow__(self, other):
         if not isinstance(self._magnitude, ndarray):
             return self.__pow__(other)
